@@ -66,11 +66,6 @@ void**			lumpcache;
 
 #define strcmpi	strcasecmp
 
-void strupr (char* s)
-{
-    while (*s) { *s = toupper(*s); s++; }
-}
-
 int filelength (int handle) 
 { 
     struct stat	fileinfo;
@@ -341,7 +336,20 @@ int W_NumLumps (void)
     return numlumps;
 }
 
+char *D_strupper (char *str)
+   {
+    char *c, t;
 
+    t = 'a' - 'A';
+
+    c = str;
+    while (*c)
+       {
+        *c = ((*c >= 'a') && (*c <= 'z')) ? *c - t : *c;
+        c++;
+       }
+    return str;
+   }
 
 //
 // W_CheckNumForName
@@ -367,7 +375,7 @@ int W_CheckNumForName (char* name)
     name8.s[8] = 0;
 
     // case insensitive
-    strupr (name8.s);		
+    D_strupper (name8.s);
 
     v1 = name8.x[0];
     v2 = name8.x[1];

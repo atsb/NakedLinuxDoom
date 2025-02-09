@@ -1538,7 +1538,7 @@ void G_RecordDemo (char* name)
     maxsize = 0x20000;
     i = M_CheckParm ("-maxdemo");
     if (i && i<myargc-1)
-	maxsize = atoi(myargv[i+1])*1024;
+	maxsize = atoll(myargv[i+1])*1024;
     demobuffer = Z_Malloc (maxsize,PU_STATIC,NULL); 
     demoend = demobuffer + maxsize;
 	

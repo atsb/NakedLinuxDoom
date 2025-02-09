@@ -69,6 +69,7 @@ extern	int		numlumps;
 void    W_InitMultipleFiles (char** filenames);
 void    W_Reload (void);
 
+char *D_strupper (char *str);
 int	W_CheckNumForName (char* name);
 int	W_GetNumForName (char* name);
 
