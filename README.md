@@ -8,8 +8,7 @@ Only things that are changed:
 1. Conversion of video code to SDL2
 2. Conversion of audio code to SDL2 (no music yet)
 3. 64bit conversion
-4. Removal of i_net functions (they are useless today)
-5. Change of typedef from boolean to dboolean
+4. Change of typedef from boolean to dboolean
 
 Supported Platforms:
 
