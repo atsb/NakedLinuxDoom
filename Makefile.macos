@@ -1,11 +1,8 @@
 SHELL = /bin/sh
 CC = gcc
-CFLAGS = -g -I/usr/include/SDL2 -D_GNU_SOURCE=1 -D_REENTRANT
-LDFLAGS = -lm -lSDL2main -lSDL2
-PREFIX = /usr/local
-BINDIR = $(PREFIX)/bin
-INSTALL = /usr/bin/install -c
-INSTALL_PROGRAM = $(INSTALL)
+CFLAGS = -g -I/opt/local/include -D_GNU_SOURCE=1 -D_REENTRANT
+LDFLAGS = -L/opt/local/lib -lm -lSDL2main -lSDL2
+BINDIR = ./bin
 
 SRC_FILES = \
     am_map.c d_items.c d_main.c d_net.c doomdef.c doomstat.c \
@@ -28,7 +25,7 @@ doom: $(OBJ_FILES)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 install: doom
-	$(INSTALL_PROGRAM) doom $(BINDIR)/doom
+	doom $(BINDIR)/doom
 
 clean:
 	rm -f doom $(OBJ_FILES)

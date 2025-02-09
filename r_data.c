@@ -27,30 +27,18 @@
 static const char
 rcsid[] = "$Id: r_data.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 
-#ifdef __BEOS__
-#ifdef __GNUC__
-extern void *alloca(int);
-#else
 #include <alloca.h>
-#endif
-#endif /* __BEOS__ */
-
 #include <stdint.h>
 
 #include "m_swap.h"
-
 #include "i_system.h"
 #include "z_zone.h"
-
 #include "w_wad.h"
-
 #include "doomdef.h"
 #include "r_local.h"
 #include "p_local.h"
-
 #include "doomstat.h"
 #include "r_sky.h"
-
 #include "r_data.h"
 
 //
