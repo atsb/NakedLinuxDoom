@@ -28,7 +28,7 @@ rcsid[] = "$Id: m_bbox.c,v 1.1 1997/02/03 22:45:10 b1 Exp $";
 #include <stdio.h>
 #include <errno.h>
 
-#define IPPORT_USERRESERVED    5000
+//#define IPPORT_USERRESERVED 5000
 
 #if defined(linux) || defined(__APPLE__)
 #include <sys/socket.h>
@@ -93,7 +93,7 @@ dboolean NetListen (void);
 // NETWORKING
 //
 
-int    DOOMPORT =    (IPPORT_USERRESERVED +0x1d );
+int    DOOMPORT = 0; //    (IPPORT_USERRESERVED +0x1d );
 
 int            sendsocket;
 int            insocket;

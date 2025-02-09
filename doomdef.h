@@ -23,6 +23,7 @@
 #ifndef __DOOMDEF__
 #define __DOOMDEF__
 
+#include <SDL2/SDL.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -267,11 +268,11 @@ typedef enum
 #define KEY_F11		(0x80+0x57)
 #define KEY_F12		(0x80+0x58)
 
-#define KEY_W       119
-#define KEY_S       115
-#define KEY_A       97
-#define KEY_D       100
-#define KEY_SPACEBAR 32
+#define KEY_W        SDLK_w
+#define KEY_S        SDLK_s
+#define KEY_A        SDLK_a
+#define KEY_D        SDLK_d
+#define KEY_SPACEBAR SDLK_SPACE
 
 #define KEY_BACKSPACE	127
 #define KEY_PAUSE	0xff
