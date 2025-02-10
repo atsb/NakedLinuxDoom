@@ -23,6 +23,8 @@
 #ifndef __M_FIXED__
 #define __M_FIXED__
 
+#include <stdlib.h>
+#include "doomtype.h"
 
 #ifdef __GNUG__
 #pragma interface
@@ -37,11 +39,24 @@
 
 typedef int fixed_t;
 
-fixed_t FixedMul	(fixed_t a, fixed_t b);
-fixed_t FixedDiv	(fixed_t a, fixed_t b);
-fixed_t FixedDiv2	(fixed_t a, fixed_t b);
+//
+// Fixed Point Multiplication
+//
 
+__inline__ static fixed_t FixedMul(fixed_t a, fixed_t b)
+{
+  return (fixed_t)((Long64) a*b >> FRACBITS);
+}
 
+//
+// Fixed Point Division
+//
+
+__inline__ static fixed_t FixedDiv(fixed_t a, fixed_t b)
+{
+  return (abs(a)>>14) >= abs(b) ? ((a^b)>>31) ^ INT_MAX :
+    (fixed_t)(((Long64) a << FRACBITS) / b);
+}
 
 #endif
 //-----------------------------------------------------------------------------
