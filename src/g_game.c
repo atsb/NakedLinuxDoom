@@ -1589,8 +1589,6 @@ void G_DoPlayDemo (void)
     if ( *demo_p++ != VERSION_NUM)
     {
       fprintf( stderr, "Demo is from a different game version!\n");
-      gameaction = ga_nothing;
-      return;
     }
     
     skill = *demo_p++; 
