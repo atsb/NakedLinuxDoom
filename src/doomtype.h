@@ -43,6 +43,7 @@ typedef enum {false, true} dboolean;
 typedef unsigned char byte;
 #endif
 
+#include <stdint.h>
 #include <limits.h>
 #define D_MAXINT INT_MAX
 #define D_MININT INT_MIN
@@ -53,7 +54,7 @@ typedef unsigned char byte;
 
 #define arrlen(array) (sizeof(array) / sizeof(*array))
 
-#define __LONG64_TYPE__ __int64
+#define __LONG64_TYPE__ long long
 typedef __LONG64_TYPE__ Long64;
 typedef unsigned __LONG64_TYPE__ ULong64;
 
