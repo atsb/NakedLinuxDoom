@@ -43,20 +43,35 @@ typedef int fixed_t;
 // Fixed Point Multiplication
 //
 
+#ifdef _WIN32
+inline static fixed_t FixedMul(fixed_t a, fixed_t b)
+{
+    return (fixed_t)((Long64)a * b >> FRACBITS);
+}
+#else
 __inline__ static fixed_t FixedMul(fixed_t a, fixed_t b)
 {
   return (fixed_t)((Long64) a*b >> FRACBITS);
 }
+#endif
 
 //
 // Fixed Point Division
 //
 
-__inline__ static fixed_t FixedDiv(fixed_t a, fixed_t b)
+#ifdef _WIN32
+inline static fixed_t FixedDiv(fixed_t a, fixed_t b)
 {
   return (abs(a)>>14) >= abs(b) ? ((a^b)>>31) ^ INT_MAX :
     (fixed_t)(((Long64) a << FRACBITS) / b);
 }
+#else
+__inline__ static fixed_t FixedDiv(fixed_t a, fixed_t b)
+{
+    return (abs(a) >> 14) >= abs(b) ? ((a ^ b) >> 31) ^ INT_MAX :
+        (fixed_t)(((Long64)a << FRACBITS) / b);
+}
+#endif
 
 #endif
 //-----------------------------------------------------------------------------

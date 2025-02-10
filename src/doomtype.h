@@ -54,7 +54,6 @@ typedef unsigned char byte;
 #define arrlen(array) (sizeof(array) / sizeof(*array))
 
 #define __LONG64_TYPE__ __int64
-#define __LONG64_TYPE__ long long
 typedef __LONG64_TYPE__ Long64;
 typedef unsigned __LONG64_TYPE__ ULong64;
 

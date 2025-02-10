@@ -28,7 +28,9 @@ rcsid[] = "$Id: w_wad.c,v 1.5 1997/02/03 16:47:57 b1 Exp $";
 #include <ctype.h>
 #include <sys/types.h>
 #include <string.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #ifdef __APPLE__
 #include <stdlib.h>
 #else
@@ -63,8 +65,11 @@ int			numlumps;
 
 void**			lumpcache;
 
-
+#ifdef _WIN32
+#define _strcmpi strcasecmp
+#else
 #define strcmpi	strcasecmp
+#endif
 
 int filelength (int handle) 
 { 

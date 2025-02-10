@@ -27,7 +27,10 @@
 static const char
 rcsid[] = "$Id: r_data.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 
+#include <stdlib.h>
+#ifndef _WIN32
 #include <alloca.h>
+#endif
 #include <stdint.h>
 
 #include "m_swap.h"
