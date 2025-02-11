@@ -324,6 +324,7 @@ void M_LoadDefaults (void)
     numdefaults = sizeof(defaults)/sizeof(defaults[0]);
     for (i=0 ; i<numdefaults ; i++)
 	*defaults[i].location = defaults[i].defaultvalue;
+    defaultfile = malloc(PATH_MAX+1);
     
     // check for a custom default file
     i = M_CheckParm ("-config");
