@@ -113,15 +113,13 @@ static channel_t*	channels;
 int 		snd_SfxVolume = 15;
 
 // Maximum volume of music. Useless so far.
-int 		snd_MusicVolume = 15; 
-
-
+int         snd_MusicVolume = 15;
 
 // whether songs are mus_paused
 static dboolean		mus_paused;	
 
 // music currently being played
-static musicinfo_t*	mus_playing=0;
+static musicinfo_t*	mus_playing;
 
 // following is set
 //  by the defaults code in M_misc:
@@ -677,7 +675,7 @@ S_ChangeMusic
 
     // load & register it
     music->data = (void *) W_CacheLumpNum(music->lumpnum, PU_MUSIC);
-    music->handle = I_RegisterSong(music->data);
+    music->handle = I_RegisterSong(music->data, W_LumpLength(music->lumpnum));
 
     // play it
     I_PlaySong(music->handle, looping);

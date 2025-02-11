@@ -13,7 +13,7 @@ else()
 endif()
 
 find_package(SDL2 2.0.7)
-#find_package(SDL2_mixer 2.0.2)
+find_package(SDL2_mixer 2.0.2)
 find_package(SDL2_net 2.0.2)
 find_package(m)
 

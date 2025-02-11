@@ -11,13 +11,13 @@ f_finale.c	m_cheat.c	p_maputl.c	r_data.c
 f_wipe.c	m_menu.c	p_mobj.c	r_draw.c	w_wad.c
 g_game.c	m_misc.c	p_plats.c	r_main.c	wi_stuff.c
 hu_lib.c	m_random.c	p_pspr.c	r_plane.c	z_zone.c
-hu_stuff.c	p_saveg.c	r_segs.c)
+hu_stuff.c	p_saveg.c	r_segs.c	mmus2mid.c)
 
 set(GAME_INCLUDE_DIRS "${CMAKE_CURRENT_BINARY_DIR}")
 
 set(SOURCE_FILES ${COMMON_SOURCE_FILES} ${GAME_SOURCE_FILES})
 
-set(EXTRA_LIBS SDL2::SDL2main SDL2::SDL2 SDL2::net)
+set(EXTRA_LIBS SDL2::SDL2main SDL2::SDL2 SDL2::net SDL2::mixer)
 
 add_executable("doom" ${GAME_SOURCE_FILES})
 

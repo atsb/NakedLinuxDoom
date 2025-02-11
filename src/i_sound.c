@@ -24,21 +24,19 @@
 static const char
 rcsid[] = "$Id: i_unix.c,v 1.5 1997/02/03 22:45:10 b1 Exp $";
 
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_mixer.h>
+#include <unistd.h>
 #include <math.h>
-
-#include <SDL2/SDL_audio.h>
-#include <SDL2/SDL_mutex.h>
-#include <SDL2/SDL_version.h>
-
+#include "sounds.h"
+#include "mmus2mid.h"
 #include "z_zone.h"
-
 #include "m_swap.h"
 #include "i_system.h"
 #include "i_sound.h"
 #include "m_argv.h"
 #include "m_misc.h"
 #include "w_wad.h"
-
 #include "doomdef.h"
 
 
@@ -47,12 +45,13 @@ rcsid[] = "$Id: i_unix.c,v 1.5 1997/02/03 22:45:10 b1 Exp $";
 //  the size of the 16bit, 2 hardware channel (stereo)
 //  mixing buffer, and the samplerate of the raw data.
 
-
 // Needed for calling the actual sound output.
 static int SAMPLECOUNT=		512;
 #define NUM_CHANNELS		8
 
 #define SAMPLERATE		11025	// Hz
+
+int snd_samplerate = 44100; // music
 
 // The actual lengths of all sound effects.
 int 		lengths[NUMSFX];
@@ -349,7 +348,6 @@ void I_SetChannels()
     }
 }	
 
- 
 void I_SetSfxVolume(int volume)
 {
   // Identical to DOS.
@@ -359,16 +357,6 @@ void I_SetSfxVolume(int volume)
   //  the mixing.
   snd_SfxVolume = volume;
 }
-
-// MUSIC API - dummy. Some code from DOS version.
-void I_SetMusicVolume(int volume)
-{
-  // Internal state variable.
-  snd_MusicVolume = volume;
-  // Now set volume on output device.
-  // Whatever( snd_MusciVolume );
-}
-
 
 //
 // Retrieve the raw data lump index
@@ -454,9 +442,9 @@ void I_UpdateSound(void *unused, Uint8 *stream, int len)
 {
   // Mix current sound data.
   // Data, from raw sound, for right and left.
-  register unsigned int	sample;
-  register int		dl;
-  register int		dr;
+  unsigned int	sample;
+  int		dl;
+  int		dr;
   
   // Pointers in audio stream, left, right, end.
   signed short*		leftout;
@@ -571,9 +559,13 @@ I_InitSound()
 { 
   SDL_AudioSpec wanted;
   int i;
+  int audio_buffers;
   
   // Secure and configure sound device first.
   fprintf( stderr, "I_InitSound: ");
+    
+  /* Initialize variables */
+  audio_buffers = SAMPLECOUNT * snd_samplerate / 11025; // music
   
   // Open the audio device
   wanted.freq = SAMPLERATE;
@@ -585,13 +577,18 @@ I_InitSound()
   wanted.channels = 2;
   wanted.samples = SAMPLECOUNT;
   wanted.callback = I_UpdateSound;
-  if ( SDL_OpenAudio(&wanted, NULL) < 0 ) {
-    fprintf(stderr, "couldn't open audio with desired format\n");
+  if (SDL_OpenAudio(&wanted, NULL) < 0) {
+    fprintf(stderr, "SDL_OpenAudio: couldn't open audio with desired format\n");
     return;
   }
   SAMPLECOUNT = wanted.samples;
   fprintf(stderr, " configured audio device with %d samples/slice\n", SAMPLECOUNT);
 
+  if (Mix_OpenAudio(snd_samplerate, MIX_DEFAULT_FORMAT, 2, audio_buffers) < 0)
+  {
+      fprintf(stderr, "Mix_OpenAudio: couldn't open music with desired format\n");
+      return;
+  }
     
   // Initialize external data (all sounds) at start, keep static.
   fprintf( stderr, "I_InitSound: ");
@@ -616,70 +613,197 @@ I_InitSound()
   
   // Finished initialization.
   fprintf(stderr, "I_InitSound: sound module ready\n");
+  fprintf(stderr, "I_InitSound: music module ready\n");
   SDL_PauseAudio(0);
 }
 
-
-
-
 //
 // MUSIC API.
-// Still no music done.
-// Remains. Dummies.
 //
-void I_InitMusic(void)		{ }
-void I_ShutdownMusic(void)	{ }
+// Only one track at a time
+static Mix_Music *music = NULL;
 
-static int	looping=0;
-static int	musicdies=-1;
+// Some tracks are directly streamed from the RWops;
+// we need to free them in the end
+static SDL_RWops *rw = NULL;
+
+// Same goes for buffers that were allocated to convert music;
+// since this concerns mus, we could do otherwise but this
+// approach is better for consistency
+static void *music_block = NULL;
+
+// Macro to make code more readable
+#define CHECK_MUSIC(h) ((h) && music != NULL)
+
+//
+// I_ShutdownMusic
+//
+// atexit handler.
+//
+void I_ShutdownMusic(void)
+{
+   I_UnRegisterSong(1);
+}
+
+// jff 1/18/98 changed interface to make mididata destroyable
 
 void I_PlaySong(int handle, int looping)
 {
-  // UNUSED.
-  handle = looping = 0;
-  musicdies = gametic + TICRATE*30;
+
+   if(CHECK_MUSIC(handle) && Mix_PlayMusic(music, looping ? -1 : 0) == -1)
+   {
+      printf("I_PlaySong: Mix_PlayMusic failed\n");
+      return;
+   }
+   
+   // haleyjd 10/28/05: make sure volume settings remain consistent
+   I_SetMusicVolume(snd_MusicVolume);
 }
 
-void I_PauseSong (int handle)
+//
+// I_SetMusicVolume
+//
+void I_SetMusicVolume(int volume)
 {
-  // UNUSED.
-  handle = 0;
+   // haleyjd 09/04/06: adjust to use scale from 0 to 15
+   Mix_VolumeMusic((volume * 128) / 15);
 }
 
-void I_ResumeSong (int handle)
+static int paused_midi_volume;
+
+//
+// I_PauseSong
+//
+void I_PauseSong(int handle)
 {
-  // UNUSED.
-  handle = 0;
+   if(CHECK_MUSIC(handle))
+   {
+      // Not for mids
+      if(Mix_GetMusicType(music) != MUS_MID)
+         Mix_PauseMusic();
+      else
+      {
+         // haleyjd 03/21/06: set MIDI volume to zero on pause
+         paused_midi_volume = Mix_VolumeMusic(-1);
+         Mix_VolumeMusic(0);
+      }
+   }
 }
 
+//
+// I_ResumeSong
+//
+void I_ResumeSong(int handle)
+{
+   if(CHECK_MUSIC(handle))
+   {
+      // Not for mids
+      if(Mix_GetMusicType(music) != MUS_MID)
+         Mix_ResumeMusic();
+      else
+         Mix_VolumeMusic(paused_midi_volume);
+   }
+}
+
+//
+// I_StopSong
+//
 void I_StopSong(int handle)
 {
-  // UNUSED.
-  handle = 0;
-  
-  looping = 0;
-  musicdies = 0;
+   if(CHECK_MUSIC(handle))
+      Mix_HaltMusic();
 }
 
+//
+// I_UnRegisterSong
+//
 void I_UnRegisterSong(int handle)
 {
-  // UNUSED.
-  handle = 0;
+   if(CHECK_MUSIC(handle))
+   {
+      // Stop and free song
+      I_StopSong(handle);
+      Mix_FreeMusic(music);
+      
+      // Free RWops
+      if(rw != NULL)
+         SDL_FreeRW(rw);
+      
+      // Free music block
+      if(music_block != NULL)
+         free(music_block);
+      
+      // Reinitialize all this
+      music = NULL;
+      rw = NULL;
+      music_block = NULL;
+   }
 }
 
-int I_RegisterSong(void* data)
+//
+// I_RegisterSong
+//
+int I_RegisterSong(void *data, int size)
 {
-  // UNUSED.
-  data = NULL;
-  
-  return 1;
+   if(music != NULL)
+      I_UnRegisterSong(1);
+   
+   rw    = SDL_RWFromMem(data, size);
+   music = Mix_LoadMUS_RW(rw, false);
+   
+   // It's not recognized by SDL_mixer, is it a mus?
+   if(music == NULL)
+   {
+      int err;
+      MIDI mididata;
+      UBYTE *mid;
+      int midlen;
+      
+      SDL_FreeRW(rw);
+      rw = NULL;
+
+      memset(&mididata, 0, sizeof(MIDI));
+      
+      if((err = mmus2mid((byte *)data, &mididata, 89, 0)))
+      {
+         // Nope, not a mus.
+         printf("Error loading music: %d", err);
+         return 0;
+      }
+
+      // Hurrah! Let's make it a mid and give it to SDL_mixer
+      MIDIToMidi(&mididata, &mid, &midlen);
+      rw    = SDL_RWFromMem(mid, midlen);
+      music = Mix_LoadMUS_RW(rw, false);
+
+      if(music == NULL)
+      {
+         // Conversion failed, free everything
+         SDL_FreeRW(rw);
+         rw = NULL;
+         free(mid);
+      }
+      else
+      {
+         // Conversion succeeded
+         // -> save memory block to free when unregistering
+         music_block = mid;
+      }
+   }
+   
+   // the handle is a simple boolean
+   return music != NULL;
 }
 
+//
+// I_QrySongPlaying
+//
 // Is the song playing?
+//
 int I_QrySongPlaying(int handle)
 {
-  // UNUSED.
-  handle = 0;
-  return looping || musicdies > gametic;
+   // haleyjd: this is never called
+   // julian: and is that a reason not to code it?!?
+   // haleyjd: ::shrugs::
+   return CHECK_MUSIC(handle);
 }
-
