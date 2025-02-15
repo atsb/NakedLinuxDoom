@@ -139,12 +139,6 @@ extern  dboolean		viewactive;
 extern  dboolean		nodrawers;
 extern  dboolean		noblit;
 
-extern	int		viewwindowx;
-extern	int		viewwindowy;
-extern	int		viewheight;
-extern	int		viewwidth;
-extern	int		scaledviewwidth;
-
 
 
 
@@ -252,7 +246,6 @@ extern  dboolean         precache;
 //  to force a wipe on the next draw
 extern  gamestate_t     wipegamestate;
 
-extern  int             mouseSensitivity;
 //?
 // debug flag to cancel adaptiveness
 extern  dboolean         singletics;	

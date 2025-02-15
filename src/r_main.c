@@ -123,7 +123,7 @@ void (*fuzzcolfunc) (void);
 void (*transcolfunc) (void);
 void (*spanfunc) (void);
 
-
+extern int		scaledviewwidth;
 
 //
 // R_AddPointToBox

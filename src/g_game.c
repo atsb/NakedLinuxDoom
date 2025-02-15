@@ -181,6 +181,7 @@ int             turnheld;				// for accelerative turning
  
 dboolean		mousearray[4]; 
 dboolean*	mousebuttons = &mousearray[1];		// allow [-1]
+extern  int             mouseSensitivity;
 
 // mouse values are used once 
 int             mousex;

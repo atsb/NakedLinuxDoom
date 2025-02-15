@@ -117,6 +117,8 @@ dboolean		singletics = false; // debug flag to cancel adaptiveness
 
 extern  dboolean	inhelpscreens;
 
+extern int		scaledviewwidth;
+
 skill_t		startskill;
 int             startepisode;
 int		startmap;

@@ -189,7 +189,6 @@ extern int	viewwidth;
 extern int	viewheight;
 
 extern int	mouseSensitivity;
-extern int	showMessages;
 
 extern int	detailLevel;
 
