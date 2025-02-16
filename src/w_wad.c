@@ -70,7 +70,7 @@ void**			lumpcache;
 #define strcmpi	strcasecmp
 #endif
 
-int filelength (int handle) 
+int filelength_d (int handle) 
 { 
     struct stat	fileinfo;
     
@@ -173,7 +173,7 @@ void W_AddFile (char *filename)
 	// single lump file
 	fileinfo = &singleinfo;
 	singleinfo.filepos = 0;
-	singleinfo.size = LONG(filelength(handle));
+	singleinfo.size = LONG(filelength_d(handle));
 	ExtractFileBase (filename, singleinfo.name);
 	numlumps++;
     }
