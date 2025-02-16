@@ -28,6 +28,10 @@
 #include <stdint.h>
 #include <ctype.h>
 
+#ifdef _WIN32
+#include <Windows.h>
+#endif
+
 extern int access(char *file, int mode);
 
 #include "doomdef.h"
@@ -320,8 +324,11 @@ void M_LoadDefaults (void)
     numdefaults = sizeof(defaults)/sizeof(defaults[0]);
     for (i=0 ; i<numdefaults ; i++)
 	*defaults[i].location = defaults[i].defaultvalue;
-    defaultfile = malloc(PATH_MAX+1);
-    
+#ifdef _WIN32
+    defaultfile = malloc(MAX_PATH+1);
+#else
+    defaultfile = malloc(PATH_MAX + 1);
+#endif
     // check for a custom default file
     i = M_CheckParm ("-config");
     if (i && i<myargc-1)

@@ -24,7 +24,11 @@
 #include <ctype.h>
 #include <sys/types.h>
 #include <string.h>
+#ifdef _WIN32
+#include <fcntl.h>  // Needed for _O_BINARY
+#endif
 #ifndef _WIN32
+#define O_BINARY		0
 #include <unistd.h>
 #endif
 #ifdef __APPLE__
@@ -34,7 +38,6 @@
 #endif
 #include <fcntl.h>
 #include <sys/stat.h>
-#define O_BINARY		0
 
 #include "doomtype.h"
 #include "m_swap.h"
@@ -455,9 +458,16 @@ W_ReadLump
 	
     if (l->handle == -1)
     {
-	// reloadable file, so use open / read / close
-	if ( (handle = open (reloadname,O_RDONLY | O_BINARY)) == -1)
-	    I_Error ("W_ReadLump: couldn't open %s",reloadname);
+        // reloadable file, so use open / read / close
+#ifdef _WIN32
+        handle = _open(reloadname, _O_RDONLY | _O_BINARY);
+#else
+        handle = open(reloadname, O_RDONLY | O_BINARY);
+#endif
+        if (handle == -1)
+        {
+            I_Error("W_ReadLump: couldn't open %s", reloadname);
+        }
     }
     else
 	handle = l->handle;

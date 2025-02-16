@@ -205,7 +205,7 @@ void R_InitSpriteDefs (char** namelist)
 	memset (sprtemp,-1, sizeof(sprtemp));
 		
 	maxframe = -1;
-	intname = *(int *)namelist[i];
+	intname = namelist[i];
 	
 	// scan the lumps,
 	//  filling in the frames for whatever is found
