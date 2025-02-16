@@ -28,19 +28,13 @@
 #ifndef __BYTEBOOL__
 #define __BYTEBOOL__
 // Fixed to use builtin bool type with C++.
-#ifdef __cplusplus
-typedef bool dboolean;
-#else
-#ifdef __BEOS__	/* dboolean is a builtin type for MWCC */
-#define dboolean D_BOOL
-#undef false
-#define false D_false
-#undef true
-#define true D_true
-#endif
-typedef enum {false, true} dboolean;
-#endif
 typedef unsigned char byte;
+#undef true
+#undef false
+typedef enum {
+	false = 0,
+	true = 1
+} dboolean;
 #endif
 
 #include <stdint.h>
