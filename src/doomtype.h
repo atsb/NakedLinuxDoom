@@ -86,7 +86,23 @@ typedef unsigned __LONG64_TYPE__ ULong64;
 #endif
 #endif
 
-
+#ifdef _WIN32
+#include <direct.h>
+#include <io.h>
+#define F_OK 0
+#define W_OK 2
+#define R_OK 4
+#define S_ISDIR(x) (((sbuf.st_mode & S_IFDIR)==S_IFDIR)?1:0)
+#define strcasecmp _stricmp
+#define strncasecmp _strnicmp
+#define PATH_MAX _MAX_PATH
+#else
+#include <unistd.h>
+#include <ctype.h> // tolower()
+#define O_BINARY 0
+#define stricmp strcasecmp
+#define strnicmp strncasecmp
+#endif
 
 
 #endif

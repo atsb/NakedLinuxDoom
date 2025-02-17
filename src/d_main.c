@@ -31,24 +31,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-extern int access(char *file, int mode);
-
-#define R_OK	4
-#if 0
-static int access(char *file, int mode)
-{
-	FILE *test_fp;
-
-	test_fp = fopen(file, "r");
-	if ( test_fp != NULL ) {
-		fclose(test_fp);
-		return(0);
-	}
-	return(-1);
-}
-#endif
-
-
 #include "doomdef.h"
 #include "doomstat.h"
 

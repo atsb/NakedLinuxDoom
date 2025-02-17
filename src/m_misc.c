@@ -32,8 +32,6 @@
 #include <Windows.h>
 #endif
 
-extern int access(char *file, int mode);
-
 #include "doomdef.h"
 
 #include "z_zone.h"

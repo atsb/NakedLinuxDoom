@@ -329,8 +329,8 @@ typedef enum
 {
     normal,
     close30ThenOpen,
-    close,
-    open,
+    close_door,
+    open_door,
     raiseIn5Mins,
     blazeRaise,
     blazeOpen,
