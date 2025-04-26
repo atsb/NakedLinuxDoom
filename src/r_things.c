@@ -21,6 +21,11 @@
 //
 //-----------------------------------------------------------------------------
 
+
+static const char
+rcsid[] = "$Id: r_things.c,v 1.5 1997/02/03 16:47:56 b1 Exp $";
+
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -205,7 +210,7 @@ void R_InitSpriteDefs (char** namelist)
 	memset (sprtemp,-1, sizeof(sprtemp));
 		
 	maxframe = -1;
-	intname = namelist[i];
+	intname = *(int *)namelist[i];
 	
 	// scan the lumps,
 	//  filling in the frames for whatever is found
@@ -979,6 +984,7 @@ void R_DrawMasked (void)
     if (!viewangleoffset)		
 	R_DrawPlayerSprites ();
 }
+
 
 
 
