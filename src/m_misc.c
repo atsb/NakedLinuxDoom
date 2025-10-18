@@ -209,7 +209,7 @@ extern char*	chat_macros[];
 typedef struct
 {
     char*	name;
-    int*	location;
+    void*	location;
     long long	defaultvalue;
     int		scantranslate;		// PC scan code hack
     int		untranslated;		// lousy hack
@@ -290,7 +290,7 @@ void M_SaveDefaults (void)
 	if (defaults[i].defaultvalue > -0xfff
 	    && defaults[i].defaultvalue < 0xfff)
 	{
-	    v = *defaults[i].location;
+	    v = *(int*)defaults[i].location;
 	    fprintf (f,"%s\t\t%i\n",defaults[i].name,v);
 	} else {
 	    fprintf (f,"%s\t\t\"%s\"\n",defaults[i].name,
@@ -321,7 +321,7 @@ void M_LoadDefaults (void)
     // set everything to base values
     numdefaults = sizeof(defaults)/sizeof(defaults[0]);
     for (i=0 ; i<numdefaults ; i++)
-	*defaults[i].location = defaults[i].defaultvalue;
+	*(int*)defaults[i].location = defaults[i].defaultvalue;
 #ifdef _WIN32
     defaultfile = malloc(MAX_PATH+1);
 #else
@@ -363,9 +363,9 @@ void M_LoadDefaults (void)
 		    if (!strcmp(def, defaults[i].name))
 		    {
 			if (!isstring)
-			    *defaults[i].location = parm;
+			    *(int*)defaults[i].location = parm;
 			else
-			    *defaults[i].location = newstring;
+			    *(char**)defaults[i].location = newstring;
 			break;
 		    }
 	    }
