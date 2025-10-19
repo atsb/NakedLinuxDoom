@@ -2,8 +2,6 @@ cmake_minimum_required(VERSION 3.15)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 project("Doom")
 
-# Any settings that should apply to all targets in this directory and all
-# subdirectories should go here.  Use judiciously.
 if(MSVC)
     add_definitions("/D_CRT_SECURE_NO_WARNINGS" "/D_CRT_SECURE_NO_DEPRECATE"
                     "/D_CRT_NONSTDC_NO_DEPRECATE")
@@ -12,8 +10,8 @@ else()
                         "-Wredundant-decls")
 endif()
 
-find_package(SDL2 2.0.7)
-find_package(SDL2_net 2.0.1)
+find_package(SDL3)
+find_package(SDL3_net)
 find_package(m)
 
 if( NOT WIN32 OR NOT MSVC )

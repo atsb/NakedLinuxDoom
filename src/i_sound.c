@@ -17,11 +17,11 @@
 // $Log:$
 //
 // DESCRIPTION:
-//	System interface for sound.
+//	System interface for sound
 //
 //-----------------------------------------------------------------------------
 
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 #include <math.h>
 #include "sounds.h"
 #include "mmus2mid.h"
@@ -39,6 +39,10 @@
 #define TML_IMPLEMENTATION
 #include "tml.h"
 
+static SDL_AudioStream *audio_stream = NULL;
+static Sint16 *audio_buffer = NULL;
+static int audio_buffer_size = 0;
+
 // The number of internal mixing channels,
 //  the samples calculated for each mixing step,
 //  the size of the 16bit, 2 hardware channel (stereo)
@@ -47,10 +51,10 @@
 // Needed for calling the actual sound output.
 static int SAMPLECOUNT = 512;
 #define NUM_CHANNELS 8
-#define SAMPLERATE 11025  // Hz
+#define SAMPLERATE 11025
 #define MUSIC_BUFFER_SIZE 4096
 
-int snd_samplerate = 44100; // music
+int snd_samplerate = 11025; // music
 
 // The actual lengths of all sound effects.
 int lengths[NUMSFX];
@@ -103,88 +107,9 @@ static int music_playing = 0;
 static int music_looping = 0;
 static int music_paused = 0;
 static float music_volume = 1.0f;
-static SDL_Thread* music_thread = NULL;
-static SDL_mutex* music_mutex = NULL;
-static int music_thread_running = 0;
+// SDL3: Use mutex instead of thread for synchronization
+static SDL_Mutex* music_mutex = NULL;
 static short* music_buffer = NULL;
-
-//
-// Music rendering thread
-//
-int music_render_thread(void* data)
-{
-    while (music_thread_running)
-    {
-        SDL_LockMutex(music_mutex);
-        
-        if (music_playing && !music_paused && g_tml_current && g_tsf)
-        {
-            int sample_block = MUSIC_BUFFER_SIZE / 2; // stereo, so divide by 2
-            
-            // Process MIDI events for this time slice
-            while (g_tml_current && g_msec >= g_tml_current->time)
-            {
-                switch (g_tml_current->type)
-                {
-                    case TML_PROGRAM_CHANGE:
-                        tsf_channel_set_presetnumber(g_tsf, g_tml_current->channel, 
-                                                    g_tml_current->program, 0);
-                        break;
-                    case TML_NOTE_ON:
-                        tsf_channel_note_on(g_tsf, g_tml_current->channel, 
-                                          g_tml_current->key, g_tml_current->velocity / 127.0f);
-                        break;
-                    case TML_NOTE_OFF:
-                        tsf_channel_note_off(g_tsf, g_tml_current->channel, g_tml_current->key);
-                        break;
-                    case TML_PITCH_BEND:
-                        tsf_channel_set_pitchwheel(g_tsf, g_tml_current->channel, 
-                                                   g_tml_current->pitch_bend);
-                        break;
-                    case TML_CONTROL_CHANGE:
-                        tsf_channel_midi_control(g_tsf, g_tml_current->channel, 
-                                                g_tml_current->control, g_tml_current->control_value);
-                        break;
-                }
-                g_tml_current = g_tml_current->next;
-            }
-            
-            if (!g_tml_current && music_looping)
-            {
-                g_tml_current = g_tml;
-                g_msec = 0;
-                tsf_reset(g_tsf);
-            }
-            else if (!g_tml_current)
-            {
-                music_playing = 0;
-            }
-            
-            // Render audio for this block
-            tsf_render_short(g_tsf, music_buffer, sample_block, 0);
-            
-            // Apply volume
-            for (int i = 0; i < MUSIC_BUFFER_SIZE; i++)
-            {
-                music_buffer[i] = (short)(music_buffer[i] * music_volume);
-            }
-            
-            // Advance time by the duration of samples we just rendered
-            // sample_block samples at SAMPLERATE Hz = (sample_block / SAMPLERATE) seconds
-            g_msec += (sample_block * 1000.0) / SAMPLERATE;
-        }
-        else
-        {
-            if (music_buffer)
-                memset(music_buffer, 0, MUSIC_BUFFER_SIZE * sizeof(short));
-        }
-        
-        SDL_UnlockMutex(music_mutex);
-        SDL_Delay(10);
-    }
-    
-    return 0;
-}
 
 //
 // This function loads the sound data from the WAD lump,
@@ -359,10 +284,7 @@ int I_StartSound(int id, int vol, int sep, int pitch, int priority)
 {
     // UNUSED
     priority = 0;
-    
-    SDL_LockAudio();
     id = addsfx(id, vol, steptable[pitch], sep);
-    SDL_UnlockAudio();
     
     return id;
 }
@@ -379,17 +301,13 @@ int I_SoundIsPlaying(int handle)
 }
 
 //
-// This function loops all active (internal) sound
-//  channels, retrieves a given number of samples
-//  from the raw sound data, modifies it according
-//  to the current (internal) channel parameters,
-//  mixes the per channel samples into the given
-//  mixing buffer, and clamping it to the allowed
-//  range.
+// Mix audio for the current frame
 //
-
-void I_UpdateSound(void *unused, Uint8 *stream, int len)
+void I_SubmitSound(void)
 {
+    if (!audio_stream || !audio_buffer)
+        return;
+
     unsigned int sample;
     int dl;
     int dr;
@@ -399,16 +317,15 @@ void I_UpdateSound(void *unused, Uint8 *stream, int len)
     int step;
     int chan;
     
-    // Clear stream first
-    memset(stream, 0, len);
+    // Clear buffer
+    memset(audio_buffer, 0, audio_buffer_size);
     
-    // Render music directly here if playing
     if (music_playing && !music_paused && g_tsf && g_tml_current)
     {
         SDL_LockMutex(music_mutex);
         
-        signed short* music_out = (signed short*)stream;
-        int samples_to_render = SAMPLECOUNT; // mono samples, not stereo
+        signed short* music_out = audio_buffer;
+        int samples_to_render = SAMPLECOUNT;
         
         // Process MIDI events up to current time
         while (g_tml_current && g_msec >= g_tml_current->time)
@@ -450,7 +367,7 @@ void I_UpdateSound(void *unused, Uint8 *stream, int len)
             music_playing = 0;
         }
         
-        // Render music for this buffer
+        // Render music for buffer
         if (music_playing)
         {
             tsf_render_short(g_tsf, music_out, samples_to_render, 0);
@@ -468,8 +385,9 @@ void I_UpdateSound(void *unused, Uint8 *stream, int len)
         SDL_UnlockMutex(music_mutex);
     }
     
-    leftout = (signed short *)stream;
-    rightout = ((signed short *)stream)+1;
+    // Mix in sound effects
+    leftout = audio_buffer;
+    rightout = audio_buffer + 1;
     step = 2;
     leftend = leftout + SAMPLECOUNT*step;
 
@@ -494,6 +412,7 @@ void I_UpdateSound(void *unused, Uint8 *stream, int len)
             }
         }
         
+        // Clamp
         if (dl > 0x7fff)
             *leftout = 0x7fff;
         else if (dl < -0x8000)
@@ -511,6 +430,22 @@ void I_UpdateSound(void *unused, Uint8 *stream, int len)
         leftout += step;
         rightout += step;
     }
+    SDL_PutAudioStreamData(audio_stream, audio_buffer, audio_buffer_size);
+}
+
+//
+// Callback to mimic SDL2 behavior
+//
+static void audio_callback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount)
+{
+    // Keep stream fed
+    (void)userdata;
+    (void)stream;
+    (void)total_amount;
+    
+    if (additional_amount > 0) {
+        I_SubmitSound();
+    }
 }
 
 void I_UpdateSoundParams(int handle, int vol, int sep, int pitch)
@@ -521,14 +456,6 @@ void I_UpdateSoundParams(int handle, int vol, int sep, int pitch)
 
 void I_ShutdownSound(void)
 {
-    // Stop music thread
-    music_thread_running = 0;
-    if (music_thread)
-    {
-        SDL_WaitThread(music_thread, NULL);
-        music_thread = NULL;
-    }
-    
     if (music_mutex)
     {
         SDL_DestroyMutex(music_mutex);
@@ -547,34 +474,64 @@ void I_ShutdownSound(void)
         music_buffer = NULL;
     }
     
-    SDL_CloseAudio();
+    if (audio_buffer)
+    {
+        free(audio_buffer);
+        audio_buffer = NULL;
+    }
+    
+    // Destroy audio stream
+    if (audio_stream)
+    {
+        SDL_DestroyAudioStream(audio_stream);
+        audio_stream = NULL;
+    }
 }
 
 void I_InitSound()
 {
-    SDL_AudioSpec wanted;
+    SDL_AudioSpec spec;
     int i;
     
     fprintf(stderr, "I_InitSound: ");
     
-    wanted.freq = SAMPLERATE;
-    if (SDL_BYTEORDER == SDL_BIG_ENDIAN)
-        wanted.format = AUDIO_S16MSB;
-    else
-        wanted.format = AUDIO_S16LSB;
-    wanted.channels = 2;
-    wanted.samples = SAMPLECOUNT;
-    wanted.callback = I_UpdateSound;
+    // Set up audio spec
+    SDL_zero(spec);
+    spec.freq = SAMPLERATE;
+    spec.format = SDL_AUDIO_S16;
+    spec.channels = 2;
     
-    if (SDL_OpenAudio(&wanted, NULL) < 0)
+    // Create audio stream
+    audio_stream = SDL_OpenAudioDeviceStream(
+        SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
+        &spec,
+        NULL,
+        NULL
+    );
+    
+    if (!audio_stream)
     {
-        fprintf(stderr, "SDL_OpenAudio: couldn't open audio\n");
+        fprintf(stderr, "SDL_OpenAudioDeviceStream: couldn't open audio: %s\n", SDL_GetError());
         return;
     }
     
-    SAMPLECOUNT = wanted.samples;
+    SDL_SetAudioStreamGetCallback(audio_stream, audio_callback, NULL);
+    
+    // Allocate audio buffer for mixing
+    audio_buffer_size = SAMPLECOUNT * 2 * sizeof(Sint16);  // stereo
+    audio_buffer = (Sint16*)malloc(audio_buffer_size);
+    
+    if (!audio_buffer)
+    {
+        fprintf(stderr, "Couldn't allocate audio buffer\n");
+        SDL_DestroyAudioStream(audio_stream);
+        audio_stream = NULL;
+        return;
+    }
+    
     fprintf(stderr, " configured audio device with %d samples/slice\n", SAMPLECOUNT);
 
+    // Load soundfont for music
     const char* soundfont_paths[] = {
         "./soundfont.sf2",
         "/usr/share/soundfonts/default.sf2",
@@ -598,16 +555,16 @@ void I_InitSound()
     {
         tsf_set_output(g_tsf, TSF_STEREO_INTERLEAVED, SAMPLERATE, -10.0f);
         music_mutex = SDL_CreateMutex();
+        tsf_set_max_voices(g_tsf, 64);
     }
     else
     {
         fprintf(stderr, "Warning: No soundfont found, music disabled\n");
     }
     
-    tsf_set_max_voices(g_tsf, 64);
-    
     fprintf(stderr, "I_InitSound: ");
     
+    // Pre-cache all sound effects
     for (i=1; i<NUMSFX; i++)
     {
         if (!S_sfx[i].link)
@@ -622,7 +579,9 @@ void I_InitSound()
     fprintf(stderr, " pre-cached all sound data\n");
     fprintf(stderr, "I_InitSound: sound module ready\n");
     fprintf(stderr, "I_InitSound: music module ready\n");
-    SDL_PauseAudio(0);
+    
+    // Resume audio stream
+    SDL_ResumeAudioStreamDevice(audio_stream);
 }
 
 //

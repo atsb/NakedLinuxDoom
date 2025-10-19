@@ -17,13 +17,13 @@
 // $Log:$
 //
 // DESCRIPTION:
-//	DOOM graphics stuff for SDL library
+//	DOOM graphics stuff
 //
 //-----------------------------------------------------------------------------
 
 #include <stdlib.h>
 
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 
 #include "m_swap.h"
 #include "doomstat.h"
@@ -52,9 +52,9 @@ extern int usemouse, usejoystick;
 
 static SDL_Window 	*sdl_window	= NULL;
 static SDL_Renderer	*sdl_renderer	= NULL;
-static SDL_Surface	*screen_surface = NULL;
-static SDL_Surface	*buffer_surface = NULL;
 static SDL_Texture	*render_texture = NULL;
+static Uint32		*pixel_buffer = NULL;  // 32-bit ARGB buffer
+static Uint32		palette[256];          // Converted palette
 
 static int screenWidth = SCREENWIDTH;
 static int screenHeight = SCREENHEIGHT;
@@ -62,14 +62,6 @@ static dboolean vid_initialized = false;
 static int grabMouse;
 
 #define I_NOUPDATE	0
-
-/*
-============================================================================
-
-								USER INPUT
-
-============================================================================
-*/
 
 //--------------------------------------------------------------------------
 //
@@ -79,30 +71,20 @@ static int grabMouse;
 //
 //--------------------------------------------------------------------------
 
-void I_SetPalette(byte *palette)
+void I_SetPalette(byte *pal)
 {
 	if ( !vid_initialized )
 		return;
 
-	SDL_Color colormap[256];
-	
+	// Convert 8-bit RGB palette to 32-bit ARGB format
 	for ( int i = 0; i < 256; i++ )
 	{
-		colormap[i].r = gammatable[usegamma][*palette++];
-		colormap[i].g = gammatable[usegamma][*palette++];
-		colormap[i].b = gammatable[usegamma][*palette++];
+		palette[i] = ((Uint32)0xFF << 24) |                           // Alpha
+		             ((Uint32)gammatable[usegamma][*pal++] << 16) |   // Red
+		             ((Uint32)gammatable[usegamma][*pal++] << 8) |    // Green
+		             ((Uint32)gammatable[usegamma][*pal++]);          // Blue
 	}
-	
-	SDL_SetPaletteColors(screen_surface->format->palette, colormap, 0, 256);
 }
-
-/*
-============================================================================
-
-							GRAPHICS MODE
-
-============================================================================
-*/
 
 /*
 ==============
@@ -114,36 +96,91 @@ void I_SetPalette(byte *palette)
 
 void I_Update (void)
 {
-// draws little dots on the bottom of the screen
-   if(devparm)
-   {
-      static int lasttic;
-      byte *s = screens[0];
-      
-      int i = I_GetTime();
-      int tics = i - lasttic;
-      lasttic = i;
-      if (tics > 20)
-      {
-         tics = 20;
-      }
-         for (i=0 ; i<tics*2 ; i+=2)
-            s[(SCREENHEIGHT-1)*SCREENWIDTH + i] = 0xff;
-         for ( ; i<20*2 ; i+=2)
-            s[(SCREENHEIGHT-1)*SCREENWIDTH + i] = 0x0;
-   }
-   
-	SDL_Rect blit_rect = { 0, 0, SCREENWIDTH, SCREENHEIGHT };
+	// draws little dots on the bottom of the screen
+	if(devparm)
+	{
+		static int lasttic;
+		byte *s = screens[0];
+		
+		int i = I_GetTime();
+		int tics = i - lasttic;
+		lasttic = i;
+		if (tics > 20)
+		{
+			tics = 20;
+		}
+		for (i=0 ; i<tics*2 ; i+=2)
+			s[(SCREENHEIGHT-1)*SCREENWIDTH + i] = 0xff;
+		for ( ; i<20*2 ; i+=2)
+			s[(SCREENHEIGHT-1)*SCREENWIDTH + i] = 0x0;
+	}
 	
-	SDL_LowerBlit (screen_surface, &blit_rect, buffer_surface, &blit_rect);
-
-	SDL_UpdateTexture (render_texture, NULL, buffer_surface->pixels,
-		buffer_surface->pitch);
-
-	SDL_RenderClear (sdl_renderer);
-	SDL_RenderCopy (sdl_renderer, render_texture, NULL, NULL);
+	void* pixels;
+	int pitch;
 	
-	SDL_RenderPresent (sdl_renderer);
+	if (SDL_LockTexture(render_texture, NULL, &pixels, &pitch))
+	{
+		byte* src = screens[0];
+		Uint32* dst = (Uint32*)pixels;
+		
+#if defined(__aarch64__) || defined(__ARM_ARCH_8__) || defined(__arm64__)
+		__builtin_prefetch(palette, 0, 3);
+		
+		int total = SCREENWIDTH * SCREENHEIGHT;
+		int i = 0;
+		
+		for (; i <= total - 16; i += 16)
+		{
+			__builtin_prefetch(src + i + 64, 0, 0);
+			
+			dst[i+0]  = palette[src[i+0]];
+			dst[i+1]  = palette[src[i+1]];
+			dst[i+2]  = palette[src[i+2]];
+			dst[i+3]  = palette[src[i+3]];
+			dst[i+4]  = palette[src[i+4]];
+			dst[i+5]  = palette[src[i+5]];
+			dst[i+6]  = palette[src[i+6]];
+			dst[i+7]  = palette[src[i+7]];
+			dst[i+8]  = palette[src[i+8]];
+			dst[i+9]  = palette[src[i+9]];
+			dst[i+10] = palette[src[i+10]];
+			dst[i+11] = palette[src[i+11]];
+			dst[i+12] = palette[src[i+12]];
+			dst[i+13] = palette[src[i+13]];
+			dst[i+14] = palette[src[i+14]];
+			dst[i+15] = palette[src[i+15]];
+		}
+		
+		for (; i < total; i++)
+			dst[i] = palette[src[i]];
+#else
+		for (int y = 0; y < SCREENHEIGHT; y++)
+		{
+			Uint32* dst_row = (Uint32*)((Uint8*)pixels + y * pitch);
+			byte* src_row = src + y * SCREENWIDTH;
+			
+			int x = 0;
+			for (; x <= SCREENWIDTH - 8; x += 8)
+			{
+				dst_row[x+0] = palette[src_row[x+0]];
+				dst_row[x+1] = palette[src_row[x+1]];
+				dst_row[x+2] = palette[src_row[x+2]];
+				dst_row[x+3] = palette[src_row[x+3]];
+				dst_row[x+4] = palette[src_row[x+4]];
+				dst_row[x+5] = palette[src_row[x+5]];
+				dst_row[x+6] = palette[src_row[x+6]];
+				dst_row[x+7] = palette[src_row[x+7]];
+			}
+			
+			for (; x < SCREENWIDTH; x++)
+				dst_row[x] = palette[src_row[x]];
+		}
+#endif
+		
+		SDL_UnlockTexture(render_texture);
+	}
+	SDL_RenderTexture(sdl_renderer, render_texture, NULL, NULL);
+	SDL_RenderPresent(sdl_renderer);
 }
 
 //
@@ -152,10 +189,10 @@ void I_Update (void)
 
 void I_ReadScreen(byte *scr)
 {
-   int size = SCREENWIDTH*SCREENHEIGHT;
+	int size = SCREENWIDTH*SCREENHEIGHT;
 
-   // haleyjd
-   memcpy(scr, *screens, size);
+	// haleyjd
+	memcpy(scr, screens[0], size);
 }
 
 //--------------------------------------------------------------------------
@@ -167,36 +204,35 @@ void I_ReadScreen(byte *scr)
 void I_InitGraphics(void)
 {
 	char text[20];
-	int p, bpp;
-	Uint32 flags = SDL_WINDOW_FULLSCREEN_DESKTOP;
-	Uint32 rmask, gmask, bmask, amask;
-	Uint32 sdl_pixel_format;
+	SDL_WindowFlags flags = SDL_WINDOW_FULLSCREEN;
 
-	if (SDL_InitSubSystem(SDL_INIT_VIDEO) < 0) {
+	if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
 		I_Error("Couldn't initialize video: %s", SDL_GetError());
 	}
 
-	SDL_DisplayMode DispMode;
-	SDL_GetCurrentDisplayMode(0, &DispMode);
-
+	SDL_DisplayID display = SDL_GetPrimaryDisplay();
+	const SDL_DisplayMode *DispMode = SDL_GetCurrentDisplayMode(display);
+	
+	if (DispMode) {
 #ifdef _WIN32
-	screenWidth = DispMode.h * 3.0 / 4.0;
-	screenHeight = DispMode.w * 3.0 / 4.0;
+		screenWidth = DispMode->h * 3.0 / 4.0;
+		screenHeight = DispMode->w * 3.0 / 4.0;
 #else
-	screenWidth = DispMode.w * 3.0 / 4.0;
-	screenHeight = DispMode.h * 3.0 / 4.0;
+		screenWidth = DispMode->w * 3.0 / 4.0;
+		screenHeight = DispMode->h * 3.0 / 4.0;
 #endif
+	}
 
-	sdl_window = SDL_CreateWindow(text, SDL_WINDOWPOS_CENTERED,
-		SDL_WINDOWPOS_CENTERED, screenWidth, screenHeight, flags);
+	sprintf(text, "DOOM - SDL3");
+
+	sdl_window = SDL_CreateWindow(text, screenWidth, screenHeight, flags);
 		
 	if ( sdl_window == NULL )
 	{
 		I_Error ("Couldn't initialize window: %s\n", SDL_GetError());
 	}
 	
-	sdl_renderer = SDL_CreateRenderer (sdl_window, -1,
-		SDL_RENDERER_ACCELERATED | SDL_RENDERER_TARGETTEXTURE | SDL_RENDERER_PRESENTVSYNC);
+	sdl_renderer = SDL_CreateRenderer(sdl_window, NULL);
 	
 	if ( sdl_renderer == NULL )
 	{
@@ -204,32 +240,33 @@ void I_InitGraphics(void)
 		I_Error ("Couldn't initialize renderer: %s\n", SDL_GetError());
 	}
 
-	sdl_pixel_format = SDL_GetWindowPixelFormat (sdl_window);
+	SDL_SetRenderVSync(sdl_renderer, 1);
+	
+	SDL_SetRenderLogicalPresentation(sdl_renderer, SCREENWIDTH, SCREENHEIGHT,
+	                                  SDL_LOGICAL_PRESENTATION_LETTERBOX);
 
-	screen_surface = SDL_CreateRGBSurface (0, SCREENWIDTH, SCREENHEIGHT, 8,
-		0, 0, 0, 0);
-
-	SDL_FillRect (screen_surface, NULL, 0);
-
-	SDL_PixelFormatEnumToMasks (sdl_pixel_format, &bpp, &rmask, &gmask, 
-		&bmask, &amask);
-
-	buffer_surface = SDL_CreateRGBSurface (0, SCREENWIDTH, SCREENHEIGHT,
-		bpp, rmask, gmask, bmask, amask);
-
-	SDL_FillRect (buffer_surface, NULL, 0);
-
-	render_texture = SDL_CreateTexture (sdl_renderer, sdl_pixel_format,
+	render_texture = SDL_CreateTexture(sdl_renderer, SDL_PIXELFORMAT_ARGB8888,
 		SDL_TEXTUREACCESS_STREAMING, SCREENWIDTH, SCREENHEIGHT);
+
+	if (render_texture == NULL)
+	{
+		SDL_DestroyRenderer(sdl_renderer);
+		SDL_DestroyWindow(sdl_window);
+		I_Error("Couldn't create texture: %s\n", SDL_GetError());
+	}
+
+	SDL_SetTextureScaleMode(render_texture, SDL_SCALEMODE_NEAREST);
 
 	vid_initialized = true;
 
 	grabMouse = 1;
-	SDL_SetRelativeMouseMode (SDL_TRUE);
+	
+	SDL_SetWindowRelativeMouseMode(sdl_window, true);
 
-	SDL_ShowCursor (SDL_DISABLE);
+	SDL_HideCursor();
 
-	screens[0] = screen_surface->pixels;
+	// Allocate 8-bit screen buffer
+	screens[0] = (byte*)malloc(SCREENWIDTH * SCREENHEIGHT);
 
 	I_SetPalette ((byte *)W_CacheLumpName("PLAYPAL", PU_CACHE));
 }
@@ -245,11 +282,9 @@ void I_ShutdownGraphics(void)
 	if (!vid_initialized)
 		return;
 
-	if (screen_surface != NULL)
-		SDL_FreeSurface (screen_surface);
-
-	if (buffer_surface != NULL)
-		SDL_FreeSurface (buffer_surface);
+	// Free our 8-bit buffer
+	if (screens[0])
+		free(screens[0]);
 
 	if (render_texture != NULL)
 		SDL_DestroyTexture (render_texture);
@@ -268,9 +303,10 @@ void I_ShutdownGraphics(void)
 //
 //  Translates the key
 //
-static int xlatekey (SDL_Keysym *key)
+//===========================================================================
+static int xlatekey (SDL_Keycode key, SDL_Keymod mod)
 {
-	switch (key->sym)
+	switch (key)
 	{
 	case SDLK_LEFT:		return KEY_LEFTARROW;
 	case SDLK_RIGHT:	return KEY_RIGHTARROW;
@@ -311,46 +347,28 @@ static int xlatekey (SDL_Keysym *key)
 		return KEY_RALT;
 
 	case SDLK_KP_0:
-		if (key->mod & KMOD_NUM)
-			return SDLK_0;
+		return (mod & SDL_KMOD_NUM) ? SDLK_0 : 0;
 	case SDLK_KP_1:
-		if (key->mod & KMOD_NUM)
-			return SDLK_1;
+		return (mod & SDL_KMOD_NUM) ? SDLK_1 : 0;
 	case SDLK_KP_2:
-		if (key->mod & KMOD_NUM)
-			return SDLK_2;
-		else
-			return KEY_DOWNARROW;
+		return (mod & SDL_KMOD_NUM) ? SDLK_2 : KEY_DOWNARROW;
 	case SDLK_KP_3:
-		if (key->mod & KMOD_NUM)
-			return SDLK_3;
+		return (mod & SDL_KMOD_NUM) ? SDLK_3 : 0;
 	case SDLK_KP_4:
-		if (key->mod & KMOD_NUM)
-			return SDLK_4;
-		else
-			return KEY_LEFTARROW;
+		return (mod & SDL_KMOD_NUM) ? SDLK_4 : KEY_LEFTARROW;
 	case SDLK_KP_5:
 		return SDLK_5;
 	case SDLK_KP_6:
-		if (key->mod & KMOD_NUM)
-			return SDLK_6;
-		else
-			return KEY_RIGHTARROW;
+		return (mod & SDL_KMOD_NUM) ? SDLK_6 : KEY_RIGHTARROW;
 	case SDLK_KP_7:
-		if (key->mod & KMOD_NUM)
-			return SDLK_7;
+		return (mod & SDL_KMOD_NUM) ? SDLK_7 : 0;
 	case SDLK_KP_8:
-		if (key->mod & KMOD_NUM)
-			return SDLK_8;
-		else
-			return KEY_UPARROW;
+		return (mod & SDL_KMOD_NUM) ? SDLK_8 : KEY_UPARROW;
 	case SDLK_KP_9:
-		if (key->mod & KMOD_NUM)
-			return SDLK_9;
+		return (mod & SDL_KMOD_NUM) ? SDLK_9 : 0;
 
 	case SDLK_KP_PERIOD:
-		if (key->mod & KMOD_NUM)
-			return SDLK_PERIOD;
+		return (mod & SDL_KMOD_NUM) ? SDLK_PERIOD : 0;
 	case SDLK_KP_DIVIDE:	return SDLK_SLASH;
 	case SDLK_KP_MULTIPLY:	return SDLK_ASTERISK;
 	case SDLK_KP_MINUS:	return KEY_MINUS;
@@ -359,21 +377,20 @@ static int xlatekey (SDL_Keysym *key)
 	case SDLK_KP_EQUALS:	return KEY_EQUALS;
 
 	default:
-		return key->sym;
+		return key;
 	}
 }
 
-
-/* Shamelessly stolen from PrBoom+ */
+/* Mouse button conversion */
 static int I_SDLtoHereticMouseState(Uint8 buttonstate)
 {
 	return 0
-		| ((buttonstate & SDL_BUTTON(1)) ? 1 : 0)
-		| ((buttonstate & SDL_BUTTON(2)) ? 2 : 0)
-		| ((buttonstate & SDL_BUTTON(3)) ? 4 : 0);
+		| ((buttonstate & SDL_BUTTON_LMASK) ? 1 : 0)
+		| ((buttonstate & SDL_BUTTON_MMASK) ? 2 : 0)
+		| ((buttonstate & SDL_BUTTON_RMASK) ? 4 : 0);
 }
 
-/* This processes SDL events */
+/* This processes events */
 void I_GetEvent(SDL_Event *Event)
 {
 	event_t event;
@@ -381,73 +398,65 @@ void I_GetEvent(SDL_Event *Event)
 
 	switch (Event->type)
 	{
-	case SDL_KEYDOWN:
-		mod = SDL_GetModState ();
-		if (mod & (KMOD_RCTRL|KMOD_LCTRL))
+        case SDL_EVENT_KEY_DOWN:
+	mod = SDL_GetModState();
+	if (mod & (SDL_KMOD_RCTRL|SDL_KMOD_LCTRL))
+	{
+		if (Event->key.key == SDLK_G)
 		{
-			if (Event->key.keysym.sym == 'g')
+			if (!SDL_GetWindowRelativeMouseMode(sdl_window))
 			{
-				if (SDL_GetRelativeMouseMode () == SDL_FALSE)
-				{
-					grabMouse = 1;
-					SDL_SetRelativeMouseMode (SDL_TRUE);
-				}
-				else
-				{
-					grabMouse = 0;
-					SDL_SetRelativeMouseMode (SDL_FALSE);
-				}
-				break;
+				grabMouse = 1;
+				SDL_SetWindowRelativeMouseMode(sdl_window, true);
 			}
+			else
+			{
+				grabMouse = 0;
+				SDL_SetWindowRelativeMouseMode(sdl_window, false);
+			}
+			break;
 		}
-		else if (mod & (KMOD_RALT|KMOD_LALT))
+	}
+	else if (mod & (SDL_KMOD_RALT|SDL_KMOD_LALT))
+	{
+		if (Event->key.key == SDLK_RETURN)
 		{
-			if (Event->key.keysym.sym == SDLK_RETURN)
-			{
-				SDL_SetWindowFullscreen(sdl_window, 
-					SDL_WINDOW_FULLSCREEN_DESKTOP);
-				break;
-			}
+			SDL_SetWindowFullscreen(sdl_window, SDL_WINDOW_FULLSCREEN);
+			break;
 		}
-		event.type = ev_keydown;
-		event.data1 = xlatekey(&Event->key.keysym);
-		D_PostEvent(&event);
-		break;
+	}
+	event.type = ev_keydown;
+	event.data1 = xlatekey(Event->key.key, Event->key.mod);
+	D_PostEvent(&event);
+	break;
 
-	case SDL_KEYUP:
-		event.type = ev_keyup;
-		event.data1 = xlatekey(&Event->key.keysym);
-		D_PostEvent(&event);
-		break;
+        case SDL_EVENT_KEY_UP:
+	        event.type = ev_keyup;
+	        event.data1 = xlatekey(Event->key.key, Event->key.mod);
+	        D_PostEvent(&event);
+	        break;
 
-	case SDL_MOUSEBUTTONDOWN:
-	case SDL_MOUSEBUTTONUP:
+	case SDL_EVENT_MOUSE_BUTTON_DOWN:
+	case SDL_EVENT_MOUSE_BUTTON_UP:
 		event.type = ev_mouse;
 		event.data1 = I_SDLtoHereticMouseState(SDL_GetMouseState(NULL,NULL));
 		event.data2 = event.data3 = 0;
 		D_PostEvent(&event);
 		break;
 
-	case SDL_MOUSEMOTION:
-		/* Ignore mouse warp events */
+	case SDL_EVENT_MOUSE_MOTION:
 		if ((Event->motion.x != SCREENWIDTH/2) ||
 		    (Event->motion.y != SCREENHEIGHT/2) )
 		{
-			/* Warp the mouse back to the center */
-			/*
-			if (grabMouse) {
-				SDL_WarpMouse(SCREENWIDTH/2, SCREENHEIGHT/2);
-			}
-			*/
 			event.type = ev_mouse;
 			event.data1 = I_SDLtoHereticMouseState(Event->motion.state);
-			event.data2 = Event->motion.xrel << 3;
-			event.data3 = -Event->motion.yrel << 3;
+		        event.data2 = (int)(Event->motion.xrel * 8.0f);
+		        event.data3 = (int)(-Event->motion.yrel * 8.0f);
 			D_PostEvent(&event);
 		}
 		break;
 
-	case SDL_QUIT:
+	case SDL_EVENT_QUIT:
 		I_Quit();
 		break;
 
@@ -466,16 +475,6 @@ void I_StartTic (void)
 		I_GetEvent(&Event);
 }
 
-
-/*
-============================================================================
-
-							MOUSE
-
-============================================================================
-*/
-
-
 /*
 ================
 =
@@ -488,3 +487,4 @@ void I_StartupMouse (void)
 {
 	mousepresent = 1;
 }
+

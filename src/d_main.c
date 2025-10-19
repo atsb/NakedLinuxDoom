@@ -96,7 +96,6 @@ dboolean		singletics = false; // debug flag to cancel adaptiveness
 //extern int soundVolume;
 //extern  int	sfxVolume;
 //extern  int	musicVolume;
-
 extern  dboolean	inhelpscreens;
 
 extern int		scaledviewwidth;
