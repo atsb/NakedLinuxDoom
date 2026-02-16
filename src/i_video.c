@@ -1,4 +1,4 @@
-// Emacs style mode select   -*- C++ -*- 
+﻿// Emacs style mode select   -*- C++ -*- 
 //-----------------------------------------------------------------------------
 //
 // $Id:$
@@ -71,18 +71,26 @@ static int grabMouse;
 //
 //--------------------------------------------------------------------------
 
-void I_SetPalette(byte *pal)
+// fixed palette, not gamma corrected previously but now is.  Gibbon.
+void I_SetPalette(byte* pal)
 {
-	if ( !vid_initialized )
+	if (!vid_initialized)
 		return;
 
-	// Convert 8-bit RGB palette to 32-bit ARGB format
-	for ( int i = 0; i < 256; i++ )
+	int g = usegamma;
+	if (g < 0) g = 0;
+	if (g > 4) g = 4;
+
+	for (int i = 0; i < 256; i++)
 	{
-		palette[i] = ((Uint32)0xFF << 24) |                           // Alpha
-		             ((Uint32)gammatable[usegamma][*pal++] << 16) |   // Red
-		             ((Uint32)gammatable[usegamma][*pal++] << 8) |    // Green
-		             ((Uint32)gammatable[usegamma][*pal++]);          // Blue
+		byte r = *pal++;
+		byte g_val = *pal++;
+		byte b = *pal++;
+
+		palette[i] = ((Uint32)0xFF << 24) |
+			((Uint32)gammatable[g][r] << 16) |
+			((Uint32)gammatable[g][g_val] << 8) |
+			((Uint32)gammatable[g][b]);
 	}
 }
 
@@ -201,49 +209,32 @@ void I_ReadScreen(byte *scr)
 //
 //--------------------------------------------------------------------------
 
+// new and improved video scaling.  Gibbon.
 void I_InitGraphics(void)
 {
-	char text[20];
-	SDL_WindowFlags flags = SDL_WINDOW_FULLSCREEN;
-
 	if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
 		I_Error("Couldn't initialize video: %s", SDL_GetError());
 	}
 
-	SDL_DisplayID display = SDL_GetPrimaryDisplay();
-	const SDL_DisplayMode *DispMode = SDL_GetCurrentDisplayMode(display);
-	
-	if (DispMode) {
-#ifdef _WIN32
-		screenWidth = DispMode->h * 3.0 / 4.0;
-		screenHeight = DispMode->w * 3.0 / 4.0;
-#else
-		screenWidth = DispMode->w * 3.0 / 4.0;
-		screenHeight = DispMode->h * 3.0 / 4.0;
-#endif
-	}
+	sdl_window = SDL_CreateWindow("DOOM - SDL3", 0, 0, SDL_WINDOW_FULLSCREEN);
 
-	sprintf(text, "DOOM - SDL3");
-
-	sdl_window = SDL_CreateWindow(text, screenWidth, screenHeight, flags);
-		
-	if ( sdl_window == NULL )
+	if (sdl_window == NULL)
 	{
-		I_Error ("Couldn't initialize window: %s\n", SDL_GetError());
+		I_Error("Couldn't initialize window: %s\n", SDL_GetError());
 	}
-	
+
 	sdl_renderer = SDL_CreateRenderer(sdl_window, NULL);
-	
-	if ( sdl_renderer == NULL )
+
+	if (sdl_renderer == NULL)
 	{
-		SDL_DestroyWindow (sdl_window);
-		I_Error ("Couldn't initialize renderer: %s\n", SDL_GetError());
+		SDL_DestroyWindow(sdl_window);
+		I_Error("Couldn't initialize renderer: %s\n", SDL_GetError());
 	}
+
+	SDL_SetRenderLogicalPresentation(sdl_renderer, SCREENWIDTH, SCREENHEIGHT,
+		SDL_LOGICAL_PRESENTATION_STRETCH);
 
 	SDL_SetRenderVSync(sdl_renderer, 1);
-	
-	SDL_SetRenderLogicalPresentation(sdl_renderer, SCREENWIDTH, SCREENHEIGHT,
-	                                  SDL_LOGICAL_PRESENTATION_LETTERBOX);
 
 	render_texture = SDL_CreateTexture(sdl_renderer, SDL_PIXELFORMAT_ARGB8888,
 		SDL_TEXTUREACCESS_STREAMING, SCREENWIDTH, SCREENHEIGHT);
@@ -258,17 +249,13 @@ void I_InitGraphics(void)
 	SDL_SetTextureScaleMode(render_texture, SDL_SCALEMODE_NEAREST);
 
 	vid_initialized = true;
-
 	grabMouse = 1;
-	
 	SDL_SetWindowRelativeMouseMode(sdl_window, true);
-
 	SDL_HideCursor();
 
-	// Allocate 8-bit screen buffer
 	screens[0] = (byte*)malloc(SCREENWIDTH * SCREENHEIGHT);
 
-	I_SetPalette ((byte *)W_CacheLumpName("PLAYPAL", PU_CACHE));
+	I_SetPalette((byte*)W_CacheLumpName("PLAYPAL", PU_CACHE));
 }
 
 //--------------------------------------------------------------------------
